@@ -11,7 +11,7 @@ import SwiftUI
 struct MangaWebTranslationApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CrossPlatformWebView()
         }
     }
 }
