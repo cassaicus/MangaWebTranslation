@@ -70,7 +70,7 @@ class AppSettings: ObservableObject {
         self.targetLanguage = UserDefaults.standard.string(forKey: Keys.targetLanguage) ?? "en" // デフォルトは英語
 
         // 保存されている値から位置を復元し、なければデフォルト値を設定します。
-        let savedPosition = UserDefaults.standard.string(forKey: Keys.floatingButtonPosition) ?? FloatingButtonPosition.topLeft.rawValue
+        let savedPosition = UserDefaults.standard.string(forKey: Keys.floatingButtonPosition) ?? FloatingButtonPosition.bottomLeft.rawValue
         self.floatingButtonPosition = FloatingButtonPosition(rawValue: savedPosition) ?? .bottomLeft
     }
 }
