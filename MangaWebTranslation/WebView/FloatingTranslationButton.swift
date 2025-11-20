@@ -1,4 +1,8 @@
-//2025/11/15.
+//
+//  FloatingTranslationButton.swift
+//  MangaWebTranslation6
+//
+//  Created by ibis on 2025/11/15.
 //
 //  翻訳機能をトリガーするためのフローティングアクションボタン（FAB）を定義します。
 //  このボタンは画面上に浮遊し、ユーザーがいつでも翻訳を実行できるようにします。

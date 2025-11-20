@@ -1,4 +1,8 @@
-//2025/11/18.
+//
+//  AppSettings.swift
+//  MangaWebTranslation6
+//
+//  Created by Jules on 2025/11/18.
 //
 //  アプリ全体の設定を管理します。
 //
@@ -27,6 +31,15 @@ let commonLanguages: [Language] = [
     .init(id: "zh-Hant", name: "Chinese (Traditional)"),
     .init(id: "ko", name: "Korean"),
     .init(id: "id", name: "Indonesian"),
+    .init(id: "nl", name: "Dutch"),
+    .init(id: "pl", name: "Polish"),
+    .init(id: "th", name: "Thai"),
+    .init(id: "tr", name: "Turkish"),
+    .init(id: "uk", name: "Ukrainian"),
+    .init(id: "vi", name: "Vietnamese"),
+    .init(id: "ar", name: "Arabic"),
+    .init(id: "hi", name: "Hindi"),
+    .init(id: "ru", name: "Russian"),
 ]
 
 /// アプリケーションの設定を管理するObservableObject。
@@ -37,6 +50,7 @@ class AppSettings: ObservableObject {
         static let initialUrl = "initialUrl"
         static let targetLanguage = "targetLanguage"
         static let floatingButtonPosition = "floatingButtonPosition"
+        static let computeUnit = "computeUnit"
     }
 
     // MARK: - Published Properties
@@ -62,6 +76,13 @@ class AppSettings: ObservableObject {
         }
     }
 
+    /// Core MLモデルが使用する計算ユニット。変更は自動的にUserDefaultsに保存されます。
+    @Published var computeUnit: ComputeUnitOption {
+        didSet {
+            UserDefaults.standard.set(computeUnit.rawValue, forKey: Keys.computeUnit)
+        }
+    }
+
     // MARK: - Initializer
 
     /// UserDefaultsから設定を読み込んで初期化します。
@@ -72,6 +93,10 @@ class AppSettings: ObservableObject {
         // 保存されている値から位置を復元し、なければデフォルト値を設定します。
         let savedPosition = UserDefaults.standard.string(forKey: Keys.floatingButtonPosition) ?? FloatingButtonPosition.bottomLeft.rawValue
         self.floatingButtonPosition = FloatingButtonPosition(rawValue: savedPosition) ?? .bottomLeft
+
+        // 保存されている計算ユニット設定を復元し、なければデフォルト値を設定します。
+        let savedComputeUnit = UserDefaults.standard.string(forKey: Keys.computeUnit) ?? ComputeUnitOption.gpu.rawValue
+        self.computeUnit = ComputeUnitOption(rawValue: savedComputeUnit) ?? .gpu
     }
 }
 
@@ -89,13 +114,50 @@ enum FloatingButtonPosition: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .topLeft:
-            return "左上"
+            return "topLeft"
         case .topRight:
-            return "右上"
+            return "topRight"
         case .bottomLeft:
-            return "左下"
+            return "topRight"
         case .bottomRight:
-            return "右下"
+            return "bottomRight"
+        }
+    }
+}
+
+
+import CoreML
+
+/// Core MLモデルが使用する計算ユニットのオプション。
+/// CaseIterableに準拠しているため、Pickerなどで選択肢として簡単に利用できます。
+enum ComputeUnitOption: String, CaseIterable, Identifiable {
+    case ane
+    case gpu
+    case cpu
+
+    var id: String { self.rawValue }
+
+    /// 設定画面に表示するテキスト。
+    var displayName: String {
+        switch self {
+        case .ane:
+            return "NeuralEngine"
+        case .gpu:
+            return "CPU and GPU"
+        case .cpu:
+            return "CPU only"
+        }
+    }
+
+    /// `MLModelConfiguration`に設定するための`MLComputeUnits`値。
+    var mlComputeUnits: MLComputeUnits {
+        switch self {
+        case .ane:
+            return .all
+        case .gpu:
+            return .cpuAndGPU
+        case .cpu:
+            return .cpuOnly
         }
     }
 }

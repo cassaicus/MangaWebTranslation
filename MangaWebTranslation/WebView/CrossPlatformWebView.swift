@@ -1,4 +1,8 @@
-//2025/11/12.
+//
+//  CrossPlatformWebView.swift
+//  MangaWebTranslation6
+//
+//  Created by ibis on 2025/11/12.
 //
 //  このファイルは、アプリケーションの主要なUIを定義します。
 //  WebViewの表示、URLの操作、スクリーンショットの取得、
@@ -234,8 +238,12 @@ struct CrossPlatformWebView: View {
     @State private var translationData: [TranslationData] = []
     /// 翻訳オーバーレイが表示されているかどうか（ON/OFF）を管理する状態変数。
     @State private var isTranslationActive = false
+    /// 翻訳処理が実行中かどうかを示す状態変数。
+    @State private var isProcessingTranslation = false
     /// 翻訳処理を行うためのTranslationSessionを保持する状態変数。
     @State private var translationSession: TranslationSession?
+    /// MANGA OCRサービスを管理するオブジェクト。
+    @State private var mangaOCRService: MangaOCRService
     /// TranslationSessionを初期化するための設定を保持する状態変数。
     @State private var translationConfig: TranslationSession.Configuration?
     /// メニューpopoverの表示状態を管理する状態変数。
@@ -254,12 +262,18 @@ struct CrossPlatformWebView: View {
     // MARK: - 初期化
 
     init() {
-        // AppSettingsから初期URLを読み込み、状態変数を初期化します。
-        // AppSettingsのインスタンス化は@StateObjectで行われるため、ここでは直接参照できません。
-        // 代わりに、AppSettingsのデフォルト値と同様のロジックを使用します。
-        let initialUrl = AppSettings().initialUrl
-        _urlInput = State(initialValue: initialUrl)
-        _address = State(initialValue: initialUrl)
+        // AppSettingsのインスタンスを生成します。
+        let settings = AppSettings()
+
+        // AppSettingsと他の状態変数を初期化します。
+        // @StateObjectの初期化は、このようにinit内で行う必要があります。
+        self._appSettings = StateObject(wrappedValue: settings)
+        self._urlInput = State(initialValue: settings.initialUrl)
+        self._address = State(initialValue: settings.initialUrl)
+
+        // 生成した設定オブジェクトを使ってmangaOCRServiceを初期化します。
+        // @Stateの初期化も同様にinit内で行います。
+        self._mangaOCRService = State(initialValue: MangaOCRService(appSettings: settings))
     }
 
     // MARK: - Computed Properties
@@ -337,50 +351,29 @@ struct CrossPlatformWebView: View {
                         if isTranslationActive {
                             TranslationOverlayView(translationData: translationData, frameSize: geometry.size)
                         }
+                        // 翻訳処理中はインジケーターを表示
+                        if isProcessingTranslation {
+                            ProgressView("翻訳中...")
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .padding()
+                                .background(Color.black.opacity(0.5))
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
                     }
                 }
                 .overlay(alignment: floatingButtonAlignment) {
                     // フローティング翻訳ボタン
                     FloatingTranslationButton(
                         imageName: isTranslationActive ? "xmark.circle.fill" : "bubble.left.and.bubble.right.fill",
-                        isDisabled: translationSession == nil
+                        isDisabled: translationSession == nil || isProcessingTranslation
                     ) {
                         // 翻訳状態をトグル（反転）させる
                         self.isTranslationActive.toggle()
 
                         // もし翻訳がONになったら、翻訳処理を実行
                         if self.isTranslationActive {
-                            // 既存の翻訳データをクリア
-                            self.translationData = []
-                            // 翻訳セッションが準備できているか確認
-                            guard let session = self.translationSession else {
-                                print("翻訳セッションの準備ができていません。")
-                                // 失敗した場合は状態を戻す
-                                self.isTranslationActive = false
-                                return
-                            }
-
-                            // WebViewのスクリーンショットを撮り、翻訳処理を開始します。
-                            webViewManager.captureWebView { image in
-                                self.capturedImage = image
-                                guard let capturedImage = image else {
-                                    // 失敗した場合は状態を戻す
-                                    self.isTranslationActive = false
-                                    return
-                                }
-
-                                // 1. 画像からテキストを認識
-                                TranslationService.recognizeText(from: capturedImage) { detectedTexts in
-                                    if #available(macOS 14.0, iOS 17.0, *) {
-                                        // 2. 認識したテキストを翻訳
-                                        TranslationService.translate(detectedTexts: detectedTexts, with: session) { translatedData in
-                                            // 3. 翻訳結果を状態変数に保存し、UIを更新
-                                            self.translationData = translatedData
-                                            print("\(translatedData.count)個のテキストブロックを翻訳しました。")
-                                        }
-                                    }
-                                }
-                            }
+                            executeTranslation()
                         }
                     }
                     .padding(10) // 画面の端からの余白
@@ -508,6 +501,12 @@ struct CrossPlatformWebView: View {
                 print("ターゲット言語が\(newLanguage)に変更されたため、翻訳設定を更新しました。")
             }
         }
+        .onChange(of: appSettings.computeUnit) { oldState, newComputeUnit in
+            // 計算ユニットの設定が変更されたら、MangaOCRServiceを新しい設定で再初期化します。
+            // これにより、アプリを再起動しなくても設定が即座に反映されます。
+            self.mangaOCRService = MangaOCRService(appSettings: appSettings)
+            print("計算ユニットが\(newComputeUnit.displayName)に変更されたため、翻訳エンジンを再初期化しました。")
+        }
     }
 
     // MARK: - ヘルパーメソッド
@@ -516,6 +515,95 @@ struct CrossPlatformWebView: View {
     private func loadInitialUrl() {
         // addressは変更せず、urlInputのみを更新することで、ユーザーのブラウジングセッションを中断させません。
         urlInput = appSettings.initialUrl
+    }
+
+    /// 翻訳処理全体を実行します。
+    private func executeTranslation() {
+        // 翻訳セッションの準備ができていなければ何もしない
+        guard let session = translationSession else {
+            print("翻訳セッションの準備ができていません。")
+            isTranslationActive = false
+            return
+        }
+
+        // 既存の翻訳データをクリア
+        translationData = []
+
+        Task {
+            // UIを更新して処理中インジケーターを表示
+            await MainActor.run {
+                isProcessingTranslation = true
+            }
+
+            // deferブロックで、処理の終了時に必ずインジケーターを非表示にする
+            defer {
+                Task {
+                    await MainActor.run {
+                        isProcessingTranslation = false
+                    }
+                }
+            }
+
+            // WebViewのスクリーンショットを非同期で取得
+            let capturedImage = await captureWebViewAsync()
+            guard let image = capturedImage else {
+                print("スクリーンショットの取得に失敗しました。")
+                await MainActor.run {
+                    isTranslationActive = false
+                }
+                return
+            }
+            self.capturedImage = image
+
+            if #available(macOS 14.0, iOS 17.0, *) {
+                // Apple VisionとMANGA OCRの両方の翻訳を並行して実行
+                async let appleVisionResults = TranslationService.recognizeAndTranslate(from: image, with: session)
+                async let mangaOcrResults = mangaOCRService.recognizeAndTranslate(from: image, with: session)
+
+                // 両方の結果を待つ
+                let (visionResults, mangaResults) = await (appleVisionResults, mangaOcrResults)
+
+                // MANGA OCRの結果が存在する領域と重なるApple Visionの結果を除外する
+                let mangaOcrBoundingBoxes = mangaResults.map { $0.boundingBox }
+                let filteredVisionResults = visionResults.filter { visionResult in
+                    !mangaOcrBoundingBoxes.contains { mangaBox in
+                        mangaBox.intersects(visionResult.boundingBox)
+                    }
+                }
+
+                // フィルタリングされたApple Visionの結果と、MANGA OCRの結果を結合する
+                let combinedResults = filteredVisionResults + mangaResults
+
+                // UIを更新して翻訳結果を表示
+                await MainActor.run {
+                    self.translationData = combinedResults
+                    print("\(combinedResults.count)個のテキストブロックを翻訳しました。")
+                }
+            }
+        }
+    }
+
+    /// `captureWebView`をasync/awaitでラップするヘルパーメソッド。
+    private func captureWebViewAsync() async -> CGImage? {
+        return await withCheckedContinuation { continuation in
+            webViewManager.captureWebView { image in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+}
+
+@available(macOS 14.0, iOS 17.0, *)
+extension TranslationService {
+    /// `recognizeText`と`translate`を組み合わせ、async/awaitで利用できるようにした便利なメソッド。
+    static func recognizeAndTranslate(from image: CGImage, with session: TranslationSession) async -> [TranslationData] {
+        return await withCheckedContinuation { continuation in
+            recognizeText(from: image) { detectedTexts in
+                translate(detectedTexts: detectedTexts, with: session) { translatedData in
+                    continuation.resume(returning: translatedData)
+                }
+            }
+        }
     }
 }
 

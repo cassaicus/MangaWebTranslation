@@ -1,4 +1,8 @@
-//2025/11/17.
+//
+//  SettingsView_macOS.swift
+//  MangaWebTranslation6
+//
+//  Created by Jules on 2025/11/17.
 //
 //  macOS専用の設定画面を定義します。
 //
@@ -36,6 +40,17 @@ struct SettingsView_macOS: View {
                         .pickerStyle(.menu)
 
                         Text("翻訳元の言語は常に日本語です。")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+
+                        Picker("計算ユニット:", selection: $appSettings.computeUnit) {
+                            ForEach(ComputeUnitOption.allCases) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        Text("アプリが不安定な場合はGPUまたはCPUをお試しください。")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
@@ -80,7 +95,7 @@ struct SettingsView_macOS: View {
             }
             .padding()
         }
-        .frame(width: 480, height: 420) // macOSに適したウィンドウサイズ
+        .frame(width: 480, height: 480) // macOSに適したウィンドウサイズ
     }
 }
 
